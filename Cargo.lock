@@ -21,7 +21,7 @@ checksum = "c71b1793ee61086797f5c80b6efa2b8ffa6d5dd703f118545808a7f2e27f7046"
 [[package]]
 name = "abes_nice_things"
 version = "0.1.0"
-source = "git+https://github.com/Course-Brains/abes_nice_things.git#6154ddb8aeda44a57466af56c8a50d79c8604338"
+source = "git+https://github.com/Course-Brains/abes_nice_things.git?rev=8d3343b#8d3343bacb47f9a5e4255c7e7726ea7e39a17c80"
 dependencies = [
  "dirs",
  "rand",

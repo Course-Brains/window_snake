@@ -1,4 +1,5 @@
 use winit::window::Window;
+#[derive(Debug)]
 pub struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,

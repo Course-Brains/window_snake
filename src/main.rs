@@ -5,34 +5,51 @@ use std::{
     ops::Range,
     collections::VecDeque,
 };
-use window::UserEvent;
-use winit::event_loop::EventLoopProxy;
+use window::{UserEvent, WindowId};
+use winit::event_loop::{EventLoop, EventLoopProxy, EventLoopBuilder};
 
-const SCALE: usize = 100;
+const SCALE: u32 = 1;
 
 fn main() {
-    Game::new();
-    std::thread::sleep(std::time::Duration::from_secs(20));
+    let (temp_tx, temp_rx) = std::sync::mpsc::channel();
+    let (move_tx, move_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut game = Game::new(temp_rx.recv().unwrap());
+        loop {
+            let attempted_move = move_rx.recv().unwrap();
+            if game.valid_move(attempted_move) {
+                game.do_move(attempted_move)
+            }
+            else {
+                game.proxy.send_event(UserEvent::Kill).unwrap();
+                panic!("INTER, YOU LOSE!!11!!1!")
+            }
+        }
+    });
+    window::run(temp_tx, move_tx);
 }
 struct Game {
     snake: Snake,
     apple: Pos,
-    apple_window: EventLoopProxy<UserEvent>,
+    proxy: EventLoopProxy<UserEvent>,
     validx: Range<u32>,
     validy: Range<u32>
 }
 impl Game {
     const START: Pos = Pos::new(4, 7);
-    fn new() -> Game {
+    fn new(proxy: EventLoopProxy<UserEvent>) -> Game {
         let mut out = Game {
-            snake: Snake::new(Game::START),
+            snake: Snake::new(Game::START, proxy.clone()),
             apple: Pos::new(0,0),
-            apple_window: window::new(),
+            proxy,
             validx: 0..10,
             validy: 0..10,
         };
+        out.proxy.send_event(UserEvent::Move {
+            pos: Game::START.into(),
+            window: WindowId::Head
+        }).unwrap();
         out.randomize_apple().unwrap();
-        out.apple_window.send_event(UserEvent::RED);
         out
     }
     // If it fails then there are no available spaces
@@ -46,26 +63,48 @@ impl Game {
             );
             if self.snake.tail.iter().map(|x| {x.pos}).collect::<Vec<Pos>>().contains(&new_pos) {
                 self.apple = new_pos;
-                self.apple_window.send_event(UserEvent::Move(new_pos.into())).unwrap();
+                self.proxy.send_event(UserEvent::Move {
+                    pos: new_pos.into(),
+                    window: WindowId::Apple
+                }).unwrap();
                 return Ok(())
             }
         }
         return Err(())
     }
+    fn valid_move(&self, dir: Dir) -> bool{
+        let new_pos = self.snake.head+dir;
+        if self.validx.contains(&new_pos.x) {// is the new x on the screen
+            return false
+        }
+        if self.validy.contains(&new_pos.y) {// is the new y on the screen
+            return false
+        }
+        if self.snake.is_tail(new_pos) {// is the new pos hitting the tail
+            return false
+        }
+        return true
+    }
+    fn do_move(&mut self, dir: Dir) {
+        if self.apple == self.snake.head+dir {// grow if it ate and apple
+            self.snake.move_grow(dir)
+        }
+        else {// otherwise, move normally without growing
+            self.snake.move_nor(dir)
+        }
+    }
 }
 struct Snake {
     head: Pos,
-    head_window: EventLoopProxy<UserEvent>,
     tail: VecDeque<TailSeg>,
-    next_window: EventLoopProxy<UserEvent>
+    proxy: EventLoopProxy<UserEvent>
 }
 impl Snake {
-    fn new(head: Pos) -> Snake {
+    fn new(head: Pos, proxy: EventLoopProxy<UserEvent>) -> Snake {
         Snake {
             head,
-            head_window: window::new(),
             tail: VecDeque::new(),
-            next_window: window::new(),
+            proxy
         }
     }
     fn col_check(&self) -> Result<(), Pos> {
@@ -77,25 +116,37 @@ impl Snake {
         Ok(())
     }
     fn move_nor(&mut self, dir: Dir) {
-        let window = self.tail.pop_back().unwrap().window;
-        self.tail.push_front(TailSeg::new(self.head, window));
+        self.tail.push_front(TailSeg::new(self.head));
+        self.tail.pop_back();
+        // Moving the last tail segment to the old head pos
+        self.proxy.send_event(UserEvent::Move {
+            pos: self.head.into(),
+            window: WindowId::Tail(self.tail.len()-1)
+        }).unwrap();
         self.head += dir;
     }
     fn move_grow(&mut self, dir: Dir) {
-        self.tail.push_front(TailSeg::new(self.head, self.next_window.clone()));
-        self.next_window = window::new();
+        self.tail.push_front(TailSeg::new(self.head));
+        self.proxy.send_event(UserEvent::ExtendTail(self.head.into())).unwrap();
         self.head += dir;
+    }
+    /// Returns true if it is a point on the tail
+    fn is_tail(&self, pos: Pos) -> bool {
+        for tail_seg in self.tail.iter() {
+            if tail_seg.pos == pos {
+                return true
+            }
+        }
+        false
     }
 }
 struct TailSeg {
     pos: Pos,
-    window: EventLoopProxy<UserEvent>
 }
 impl TailSeg {
-    fn new(pos: Pos, window: EventLoopProxy<UserEvent>) -> TailSeg {
+    fn new(pos: Pos) -> TailSeg {
         TailSeg {
             pos,
-            window
         }
     }
 }
@@ -156,10 +207,11 @@ impl std::ops::AddAssign<Dir> for Pos {
 }
 impl From<Pos> for winit::dpi::PhysicalPosition<u32> {
     fn from(value: Pos) -> Self {
-        winit::dpi::PhysicalPosition::new(value.x, value.y)
+        winit::dpi::PhysicalPosition::new(value.x*SCALE, value.y*SCALE)
     }
 }
-enum Dir {
+#[derive(Clone, Copy)]
+pub enum Dir {
     Up,
     Down,
     Left,
