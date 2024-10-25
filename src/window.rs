@@ -27,6 +27,28 @@ impl Windows {
             tail_segs: Vec::new(),
             lookup: HashMap::new(),
         };
+        let total = {
+            let size = out.head.window.current_monitor().unwrap().size();
+            (size.width/crate::SCALE)*(size.height/crate::SCALE)
+        };
+        println!("Creating {total} tail segments");
+        out.tail_segs.reserve_exact(total as usize - 1);
+        let mut new: State;
+        for index in 0..total {
+            println!("Adding tail segment#{index}");
+            new = State::new(
+                WindowBuilder::new()
+                .with_active(false)
+                .with_decorations(false)
+                .with_enabled_buttons(winit::window::WindowButtons::empty())
+                .with_inner_size(SIZE)
+                .with_position(winit::dpi::PhysicalPosition::new(-(crate::SCALE as i32 *4), -(crate::SCALE as i32 *4)))
+                .build(event_loop).unwrap()
+            ).block_on();
+            new.color = wgpu::Color::GREEN;
+            out.lookup.insert(new.window.id(), WindowId::Tail(index as usize));
+            out.tail_segs.push(new);
+        }
         // Initialization of colors/visiblity
         out.head.color = wgpu::Color::BLUE;
         out.apple.color = wgpu::Color::RED;
@@ -41,13 +63,17 @@ impl Windows {
         //out.lookup.insert(out.next.window.id(), WindowId::Next);
         return Ok(out);
     }
-    fn add_tail_seg(&mut self, pos: PhysicalPosition<u32>, event_loop: &EventLoopWindowTarget<UserEvent>) {
-        println!("Making tail segment @({},{})",pos.x,pos.y);
+    fn add_tail_seg(&mut self, _pos: PhysicalPosition<u32>, _event_loop: &EventLoopWindowTarget<UserEvent>) {
+        /*println!("Moving next tail segment to @({},{})",pos.x,pos.y);
+        let next = self.next.pop().expect("We had a little fucky wucky");
+        next.window.set_outer_position(pos);
+
+
         let mut new = State::new(gen_window(event_loop)).block_on();
         new.window.set_outer_position(pos);
         new.color = wgpu::Color::GREEN;
         self.lookup.insert(new.window.id(), WindowId::Tail(self.tail_segs.len()));
-        self.tail_segs.push(new);
+        self.tail_segs.push(new);*/
     }
     fn change_state(&mut self, id: WindowId, mut method: impl FnMut(&mut State)) {
         match id {
