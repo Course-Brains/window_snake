@@ -31,11 +31,11 @@ impl Windows {
             let size = out.head.window.current_monitor().unwrap().size();
             (size.width/crate::SCALE)*(size.height/crate::SCALE)
         };
-        println!("Creating {total} tail segments");
+        debug_println!("Creating {total} tail segments");
         out.tail_segs.reserve_exact(total as usize - 1);
         let mut new: State;
         for index in 0..total {
-            println!("Adding tail segment#{index}");
+            debug_println!("Adding tail segment#{index}");
             new = State::new(
                 WindowBuilder::new()
                 .with_active(false)
@@ -99,7 +99,7 @@ pub enum UserEvent {
         window: WindowId
     },
     ExtendTail(PhysicalPosition<u32>),
-    Redraw(WindowId),
+    //Redraw(WindowId),
     Kill,
 }
 #[derive(Debug, Copy, Clone)]
@@ -218,7 +218,7 @@ pub fn run(proxy_sender: Sender<Setup>, move_sender: Sender<crate::Dir>) {
             }
             Event::RedrawRequested(window_id) => {
                 let id = *windows.lookup.get(&window_id).unwrap();
-                println!("redrawing {id}");
+                debug_println!("redrawing {id}");
                 windows.change_state(id, |state| {
                     match state.render() {
                         Ok(_) => {}
@@ -235,25 +235,25 @@ pub fn run(proxy_sender: Sender<Setup>, move_sender: Sender<crate::Dir>) {
                 match user_event {
                     UserEvent::Move{pos, window} => {
                         windows.change_state(window, |state| {
-                            println!("move");
+                            debug_println!("move");
                             state.window.set_outer_position(pos);
-                            println!("move done")
+                            debug_println!("move done")
                         })
                     }
                     UserEvent::ExtendTail(pos) => {
-                        println!("extend");
+                        debug_println!("extend");
                         windows.add_tail_seg(pos, window_target);
-                        println!("extend done");
+                        debug_println!("extend done");
                     }
-                    UserEvent::Redraw(window_id) => {
-                        println!("redraw");
+                    /*UserEvent::Redraw(window_id) => {
+                        debug_println!("redraw");
                         windows.change_state(window_id, |state| {
                             state.window.request_redraw();
                         });
-                        println!("redraw done");
-                    }
+                        debug_println!("redraw done");
+                    }*/
                     UserEvent::Kill => {
-                        println!("KILL");
+                        debug_println!("KILL");
                         *control_flow = ControlFlow::Exit;
                     }
                 }

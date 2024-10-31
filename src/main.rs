@@ -49,16 +49,16 @@ fn main() {
             window: WindowId::Head
         }).unwrap();*/
         loop {
-            println!("at pos:{:?}\nGetting move...", game.snake.head);
+            debug_println!("at pos:{:?}\nGetting move...", game.snake.head);
             let attempted_move = move_rx.recv().unwrap();
-            println!("Got move: {attempted_move}");
+            debug_println!("Got move: {attempted_move}");
             match game.valid_move(attempted_move) {
                 Ok(_) => {
-                    println!("Move is valid: Moving");
+                    debug_println!("Move is valid: Moving");
                     game.do_move(attempted_move)
                 }
-                Err(e) => {
-                    println!("Invalid move: ending({e})");
+                Err(_e) => {
+                    debug_println!("Invalid move: ending({_e})");
                     game.proxy.send_event(UserEvent::Kill).unwrap();
                     panic!("INTER, YOU LOSE!!11!!1!")
                 }
@@ -107,15 +107,21 @@ impl Game {
                 rng.gen_range(self.validy.clone())
             );
             debug_println!("Moving apple to: ({}, {})", new_pos.x, new_pos.y);
-            if !self.snake.tail.iter().map(|x| {x.pos}).collect::<Vec<Pos>>().contains(&new_pos) {
-                debug_println!("New position does not collide with tail");
+            if self.snake.tail.iter().map(|x| {x.pos}).collect::<Vec<Pos>>().contains(&new_pos) {
+                debug_println!("Failed because of tail intersection");
+                continue;
+            }
+            if new_pos == self.snake.head {
+                debug_println!("Failed because of head intersection");
+                continue;
+            }
+            debug_println!("New position does not collide with tail/head");
                 self.apple = new_pos;
                 self.proxy.send_event(UserEvent::Move {
                     pos: new_pos.into(),
                     window: WindowId::Apple
                 }).unwrap();
                 return Ok(())
-            }
         }
         return Err(())
     }
@@ -133,15 +139,20 @@ impl Game {
         return Ok(())
     }
     fn do_move(&mut self, dir: Dir) {
+        debug_println!("{:?}", self.snake.tail.iter());
         if self.apple == self.snake.head+dir {// grow if it ate and apple
+            self.proxy.send_event(UserEvent::ExtendTail(self.snake.head.into())).unwrap();
             self.snake.move_grow(dir);
             self.randomize_apple().unwrap();
-            self.proxy.send_event(UserEvent::ExtendTail(self.snake.head.into())).unwrap();
+            self.proxy.send_event(UserEvent::Move {
+                pos: self.snake.head.into(),
+                window: WindowId::Head
+            }).unwrap();
         }
         else {// otherwise, move normally without growing
             self.proxy.send_event(UserEvent::Move {
                 pos: self.snake.head.into(),
-                window: WindowId::Tail(self.snake.tail.len()-1)
+                window: WindowId::Tail(self.snake.tail.back().unwrap().index)
             }).unwrap();
             self.snake.move_nor(dir);
             self.proxy.send_event(UserEvent::Move {
@@ -159,17 +170,17 @@ impl Snake {
     fn new(head: Pos) -> Snake {
         Snake {
             head,
-            tail: VecDeque::from([TailSeg::new(head+Dir::Left)]),
+            tail: VecDeque::from([TailSeg::new(head+Dir::Left,0)]),
         }
     }
     fn move_nor(&mut self, dir: Dir) {
-        self.tail.push_front(TailSeg::new(self.head));
-        self.tail.pop_back();
+        self.tail.back_mut().unwrap().pos = self.head;
+        self.tail.rotate_right(1);
         // Moving the last tail segment to the old head pos
         self.head += dir;
     }
     fn move_grow(&mut self, dir: Dir) {
-        self.tail.push_front(TailSeg::new(self.head));
+        self.tail.push_front(TailSeg::new(self.head,self.tail.len()));
         self.head += dir;
     }
     /// Returns true if it is a point on the tail
@@ -182,13 +193,16 @@ impl Snake {
         false
     }
 }
+#[derive(Debug)]
 struct TailSeg {
     pos: Pos,
+    index: usize
 }
 impl TailSeg {
-    fn new(pos: Pos) -> TailSeg {
+    fn new(pos: Pos, index: usize) -> TailSeg {
         TailSeg {
             pos,
+            index
         }
     }
 }
@@ -243,6 +257,25 @@ impl std::ops::AddAssign<Dir> for Pos {
             },
             Dir::Right => {
                 self.x += 1;
+            }
+        }
+    }
+}
+impl std::ops::Sub<Dir> for Pos {
+    type Output = Pos;
+    fn sub(self, rhs: Dir) -> Self::Output {
+        match rhs {
+            Dir::Up => {
+                return Pos::new(self.x, self.y-1)
+            }
+            Dir::Down => {
+                return Pos::new(self.x, self.y+1)
+            }
+            Dir::Left => {
+                return Pos::new(self.x+1, self.y)
+            }
+            Dir::Right => {
+                return Pos::new(self.x-1, self.y)
             }
         }
     }
