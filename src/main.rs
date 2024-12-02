@@ -60,7 +60,7 @@ fn main() {
                 Err(_e) => {
                     debug_println!("Invalid move: ending({_e})");
                     game.proxy.send_event(UserEvent::Kill).unwrap();
-                    panic!("INTER, YOU LOSE!!11!!1!")
+                    //panic!("INTER, YOU LOSE!!11!!1!")
                 }
             }
             /*game.proxy.send_event(UserEvent::Move {
@@ -141,7 +141,11 @@ impl Game {
     fn do_move(&mut self, dir: Dir) {
         debug_println!("{:?}", self.snake.tail.iter());
         if self.apple == self.snake.head+dir {// grow if it ate and apple
-            self.proxy.send_event(UserEvent::ExtendTail(self.snake.head.into())).unwrap();
+            // self.proxy.send_event(UserEvent::ExtendTail(self.snake.head.into())).unwrap();
+            self.proxy.send_event(UserEvent::Move {
+                pos: self.snake.head.into(),
+                window: WindowId::Tail(self.snake.tail.len())
+            }).unwrap();
             self.snake.move_grow(dir);
             self.randomize_apple().unwrap();
             self.proxy.send_event(UserEvent::Move {
