@@ -61,6 +61,8 @@ fn main() {
                     debug_println!("Invalid move: ending({_e})");
                     game.proxy.send_event(UserEvent::Kill).unwrap();
                     //panic!("INTER, YOU LOSE!!11!!1!")
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    panic!("Main failed to close after 5 seconds");
                 }
             }
             /*game.proxy.send_event(UserEvent::Move {
@@ -93,7 +95,10 @@ impl Game {
             pos: Game::START.into(),
             window: WindowId::Head
         }).unwrap();
-        out.proxy.send_event(UserEvent::ExtendTail((out.snake.head+Dir::Left).into())).unwrap();
+        out.proxy.send_event(UserEvent::Move {
+            pos: (out.snake.head+Dir::Left).into(),
+            window: WindowId::Tail(0)
+        }).unwrap();
         out.randomize_apple().unwrap();
         out
     }

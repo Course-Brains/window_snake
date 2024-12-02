@@ -63,7 +63,7 @@ impl Windows {
         //out.lookup.insert(out.next.window.id(), WindowId::Next);
         return Ok(out);
     }
-    fn add_tail_seg(&mut self, _pos: PhysicalPosition<u32>, _event_loop: &EventLoopWindowTarget<UserEvent>) {
+    /*fn add_tail_seg(&mut self, _pos: PhysicalPosition<u32>, _event_loop: &EventLoopWindowTarget<UserEvent>) {
         /*println!("Moving next tail segment to @({},{})",pos.x,pos.y);
         let next = self.next.pop().expect("We had a little fucky wucky");
         next.window.set_outer_position(pos);
@@ -74,7 +74,7 @@ impl Windows {
         new.color = wgpu::Color::GREEN;
         self.lookup.insert(new.window.id(), WindowId::Tail(self.tail_segs.len()));
         self.tail_segs.push(new);*/
-    }
+    }*/
     fn change_state(&mut self, id: WindowId, mut method: impl FnMut(&mut State)) {
         match id {
             WindowId::Head => {
@@ -98,7 +98,7 @@ pub enum UserEvent {
         pos: PhysicalPosition<u32>,
         window: WindowId
     },
-    ExtendTail(PhysicalPosition<u32>),
+    //ExtendTail(PhysicalPosition<u32>),
     //Redraw(WindowId),
     Kill,
 }
@@ -138,7 +138,7 @@ pub fn run(proxy_sender: Sender<Setup>, move_sender: Sender<crate::Dir>) {
         )
     ).unwrap();
 
-    event_loop.run(move |event, window_target, control_flow| {
+    event_loop.run(move |event, _window_target, control_flow| {
         control_flow.set_wait();
         // println!("{:?}",event);
         match event {
@@ -240,11 +240,11 @@ pub fn run(proxy_sender: Sender<Setup>, move_sender: Sender<crate::Dir>) {
                             debug_println!("move done")
                         })
                     }
-                    UserEvent::ExtendTail(pos) => {
+                    /*UserEvent::ExtendTail(pos) => {
                         debug_println!("extend");
                         windows.add_tail_seg(pos, window_target);
                         debug_println!("extend done");
-                    }
+                    }*/
                     /*UserEvent::Redraw(window_id) => {
                         debug_println!("redraw");
                         windows.change_state(window_id, |state| {
