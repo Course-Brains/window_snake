@@ -6,16 +6,23 @@ use std::{
     collections::VecDeque,
 };
 use window::{UserEvent, WindowId};
-use winit::event_loop::EventLoopProxy;
+use winit::{event_loop::EventLoopProxy, dpi::PhysicalSize};
 use abes_nice_things::prelude::*;
+use std::sync::{OnceLock, Mutex};
+use std::io::Read;
 
 const SCALE: u32 = 100;
+static SIZE: OnceLock<PhysicalSize<u32>> = OnceLock::new();
+static HIGH_SCORE: Mutex<u32> = Mutex::new(0);
 
 fn main() {
+    get_high_score();
+    let mut score = 0;
     let (temp_tx, temp_rx) = std::sync::mpsc::channel();
     let (move_tx, move_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let (proxy, size) = temp_rx.recv().unwrap();
+        SIZE.set(size).unwrap();
         let mut game = Game::new(proxy, size);
         //std::thread::sleep(std::time::Duration::from_secs(10));
         // println!("attempting move");
@@ -55,12 +62,19 @@ fn main() {
             match game.valid_move(attempted_move) {
                 Ok(_) => {
                     debug_println!("Move is valid: Moving");
-                    game.do_move(attempted_move)
+                    game.do_move(attempted_move, &mut score)
                 }
                 Err(_e) => {
                     debug_println!("Invalid move: ending({_e})");
+                    let high_score = HIGH_SCORE.lock().unwrap();
+                    println!("Your score was: {score}");
+                    if *high_score == score {
+                        println!("New high score! {high_score}");
+                    }
+                    drop(high_score);
+                    set_high_score();
                     game.proxy.send_event(UserEvent::Kill).unwrap();
-                    //panic!("INTER, YOU LOSE!!11!!1!")
+                    //panic!("INTER, YOU LOSE!!11!!1!");
                     std::thread::sleep(std::time::Duration::from_secs(5));
                     panic!("Main failed to close after 5 seconds");
                 }
@@ -72,6 +86,16 @@ fn main() {
         }
     });
     window::run(temp_tx, move_tx);
+}
+fn get_high_score() {
+    if let Ok(mut file) = std::fs::File::open(".highscore") {
+        let mut buf = [0_u8; 4];
+        file.read_exact(&mut buf).unwrap();
+        *HIGH_SCORE.lock().unwrap() = u32::from_le_bytes(buf);
+    }
+}
+fn set_high_score() {
+    std::fs::write(".highscore", (*HIGH_SCORE.lock().unwrap()).to_le_bytes()).unwrap()
 }
 struct Game {
     snake: Snake,
@@ -143,10 +167,16 @@ impl Game {
         }
         return Ok(())
     }
-    fn do_move(&mut self, dir: Dir) {
+    fn do_move(&mut self, dir: Dir, score: &mut u32) {
         debug_println!("{:?}", self.snake.tail.iter());
         if self.apple == self.snake.head+dir {// grow if it ate and apple
             // self.proxy.send_event(UserEvent::ExtendTail(self.snake.head.into())).unwrap();
+            *score += 1;
+            let mut high_score = HIGH_SCORE.lock().unwrap();
+            if *high_score < *score {
+                *high_score = *score;
+                debug_println!("New high score");
+            }
             self.proxy.send_event(UserEvent::Move {
                 pos: self.snake.head.into(),
                 window: WindowId::Tail(self.snake.tail.len())
@@ -291,7 +321,11 @@ impl std::ops::Sub<Dir> for Pos {
 }
 impl From<Pos> for winit::dpi::PhysicalPosition<u32> {
     fn from(value: Pos) -> Self {
-        winit::dpi::PhysicalPosition::new(value.x*SCALE, value.y*SCALE)
+        let size = SIZE.get().unwrap();
+        winit::dpi::PhysicalPosition::new(
+            (value.x*SCALE) + (size.width%SCALE),
+            (value.y*SCALE) + (size.height%SCALE)
+        )
     }
 }
 impl std::fmt::Display for Pos {
